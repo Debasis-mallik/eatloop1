@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API = axios.create({ 
-  baseURL: import.meta.env.VITE_API_URL || '/api' 
+  baseURL: 'https://eatloop1.onrender.com/api'
 });
 
 API.interceptors.request.use((config) => {
@@ -13,6 +13,7 @@ API.interceptors.request.use((config) => {
 API.interceptors.response.use(
   (res) => res,
   (err) => {
+    console.error('API Error:', err.response?.status, err.config?.url);
     if (err.response?.status === 401) {
       localStorage.removeItem('eatloop_token');
       localStorage.removeItem('eatloop_user');
