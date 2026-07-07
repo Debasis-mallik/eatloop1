@@ -2,8 +2,6 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
-const cors = require('cors');
-const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
@@ -11,47 +9,37 @@ require('dotenv').config();
 const app = express();
 const server = http.createServer(app);
 
-// Socket.io setup
-const io = new Server(server, {
-  cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST']
+// ✅ Manual CORS — no cors package
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
+  next();
 });
 
-// Make io accessible in routes
+// Socket.io setup
+const io = new Server(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] }
+});
+
 app.set('io', io);
 
-// Socket.io events
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
-
-  socket.on('join_order', (orderId) => {
-    socket.join(`order_${orderId}`);
-  });
-
-  socket.on('join_restaurant', (restaurantId) => {
-    socket.join(`restaurant_${restaurantId}`);
-  });
-
+  socket.on('join_order', (orderId) => socket.join(`order_${orderId}`));
+  socket.on('join_restaurant', (restaurantId) => socket.join(`restaurant_${restaurantId}`));
   socket.on('delivery_location_update', (data) => {
     io.to(`order_${data.orderId}`).emit('location_updated', data);
   });
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
+  socket.on('disconnect', () => console.log('Client disconnected:', socket.id));
 });
 
 // Middleware
-app.use(helmet());
-
-app.use(cors({
-  origin: true,
-  credentials: true
-}));
 app.use(morgan('dev'));
-app.use('/uploads', require('express').static('uploads'));
+app.use('/uploads', express.static('uploads'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -74,12 +62,17 @@ app.use('/api/ai', require('./routes/aiRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'OK', message: 'EATLOOP API Running' }));
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', message: 'EATLOOP API Running' });
+});
 
 // Error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(err.status || 500).json({ success: false, message: err.message || 'Server Error' });
+  res.status(err.status || 500).json({ 
+    success: false, 
+    message: err.message || 'Server Error' 
+  });
 });
 
 // Connect MongoDB and start server
@@ -87,7 +80,9 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('MongoDB Connected');
     const PORT = process.env.PORT || 5000;
-    server.listen(PORT, () => console.log(`EATLOOP Server running on port ${PORT}`));
+    server.listen(PORT, () => {
+      console.log(`EATLOOP Server running on port ${PORT}`);
+    });
   })
   .catch(err => {
     console.error('MongoDB connection failed:', err);
