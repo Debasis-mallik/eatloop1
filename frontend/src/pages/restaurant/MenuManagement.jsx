@@ -392,8 +392,6 @@ export function RestaurantSetup() {
   const [saving, setSaving] = useState(false);
   const [logoPreview, setLogoPreview] = useState('');
   const [coverPreview, setCoverPreview] = useState('');
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [uploadingCover, setUploadingCover] = useState(false);
 
   const CUISINE_OPTIONS = [
     'Indian', 'Chinese', 'Italian', 'Mexican',
@@ -408,53 +406,45 @@ export function RestaurantSetup() {
       : [...p.cuisine, c]
   }));
 
-  const uploadImage = async (file, type) => {
-    const formData = new FormData();
-    formData.append('image', file);
+  // ✅ Convert to Base64 — works everywhere, no server upload needed
+  const toBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+  });
 
-    const token = localStorage.getItem('eatloop_token');
-    const res = await fetch('/api/restaurants/upload', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.message);
-    return data.imageUrl;
+  const handleCoverChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File too large. Max 5MB');
+      return;
+    }
+    try {
+      const base64 = await toBase64(file);
+      setCoverPreview(base64);
+      setForm(p => ({ ...p, coverImage: base64 }));
+      toast.success('Cover photo added!');
+    } catch {
+      toast.error('Failed to load image');
+    }
   };
 
   const handleLogoChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    // Show preview instantly
-    setLogoPreview(URL.createObjectURL(file));
-    setUploadingLogo(true);
-    try {
-      const url = await uploadImage(file, 'logo');
-      setForm(p => ({ ...p, logo: url }));
-      toast.success('Logo uploaded!');
-    } catch (err) {
-      toast.error('Logo upload failed: ' + err.message);
-      setLogoPreview('');
-    } finally {
-      setUploadingLogo(false);
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File too large. Max 5MB');
+      return;
     }
-  };
-
-  const handleCoverChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setCoverPreview(URL.createObjectURL(file));
-    setUploadingCover(true);
     try {
-      const url = await uploadImage(file, 'cover');
-      setForm(p => ({ ...p, coverImage: url }));
-      toast.success('Cover photo uploaded!');
-    } catch (err) {
-      toast.error('Cover upload failed: ' + err.message);
-      setCoverPreview('');
-    } finally {
-      setUploadingCover(false);
+      const base64 = await toBase64(file);
+      setLogoPreview(base64);
+      setForm(p => ({ ...p, logo: base64 }));
+      toast.success('Logo added!');
+    } catch {
+      toast.error('Failed to load image');
     }
   };
 
@@ -490,63 +480,53 @@ export function RestaurantSetup() {
 
         <form onSubmit={handleSubmit} className="card" style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-          {/* ── Cover Photo ── */}
+          {/* Cover Photo */}
           <div>
             <label style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, display: 'block' }}>
-              🖼️ Cover Photo <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>(shown at top of restaurant page)</span>
+              🖼️ Cover Photo
+              <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12, marginLeft: 8 }}>
+                (shown at top of restaurant page)
+              </span>
             </label>
             <div
               onClick={() => document.getElementById('coverInput').click()}
               style={{
-                width: '100%', height: 200,
-                borderRadius: 'var(--radius-lg)',
+                width: '100%', height: 200, borderRadius: 'var(--radius-lg)',
                 border: `2px dashed ${coverPreview ? 'var(--primary)' : 'var(--border)'}`,
                 overflow: 'hidden', cursor: 'pointer',
-                background: coverPreview ? 'transparent' : 'var(--bg-secondary)',
+                background: 'var(--bg-secondary)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                position: 'relative', transition: 'var(--transition)'
+                position: 'relative'
               }}
             >
               {coverPreview ? (
-                <>
-                  <img
-                    src={coverPreview} alt="Cover"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                  <div style={{
-                    position: 'absolute', inset: 0,
-                    background: 'rgba(0,0,0,0.4)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    opacity: 0, transition: 'opacity 0.2s'
-                  }}
-                    onMouseEnter={e => e.currentTarget.style.opacity = 1}
-                    onMouseLeave={e => e.currentTarget.style.opacity = 0}
-                  >
-                    <span style={{ color: '#fff', fontWeight: 700 }}>Click to change</span>
-                  </div>
-                </>
+                <img src={coverPreview} alt="Cover"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                  {uploadingCover ? (
-                    <><div className="spinner" style={{ margin: '0 auto 10px' }} /><p>Uploading...</p></>
-                  ) : (
-                    <><div style={{ fontSize: 40, marginBottom: 8 }}>📷</div><p style={{ fontWeight: 600 }}>Click to upload cover photo</p><p style={{ fontSize: 12, marginTop: 4 }}>JPG, PNG, WEBP • Max 5MB</p></>
-                  )}
-                </div>
-              )}
-              {uploadingCover && coverPreview && (
-                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div className="spinner" style={{ borderTopColor: '#fff' }} />
+                  <div style={{ fontSize: 40, marginBottom: 8 }}>📷</div>
+                  <p style={{ fontWeight: 600 }}>Click to upload cover photo</p>
+                  <p style={{ fontSize: 12, marginTop: 4 }}>JPG, PNG, WEBP • Max 5MB</p>
                 </div>
               )}
             </div>
-            <input id="coverInput" type="file" accept="image/*" onChange={handleCoverChange} style={{ display: 'none' }} />
+            <input id="coverInput" type="file" accept="image/*"
+              onChange={handleCoverChange} style={{ display: 'none' }} />
+            {coverPreview && (
+              <button type="button" onClick={() => { setCoverPreview(''); setForm(p => ({ ...p, coverImage: '' })); }}
+                style={{ marginTop: 8, fontSize: 12, color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                ✕ Remove cover photo
+              </button>
+            )}
           </div>
 
-          {/* ── Logo ── */}
+          {/* Logo */}
           <div>
             <label style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, display: 'block' }}>
-              🏪 Restaurant Logo <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>(shown in cards and listings)</span>
+              🏪 Restaurant Logo
+              <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12, marginLeft: 8 }}>
+                (shown in cards and listings)
+              </span>
             </label>
             <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
               <div
@@ -557,13 +537,12 @@ export function RestaurantSetup() {
                   overflow: 'hidden', cursor: 'pointer',
                   background: 'var(--bg-secondary)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0, position: 'relative'
+                  flexShrink: 0
                 }}
               >
                 {logoPreview ? (
-                  <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : uploadingLogo ? (
-                  <div className="spinner spinner-sm" />
+                  <img src={logoPreview} alt="Logo"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
                     <div style={{ fontSize: 24 }}>🏪</div>
@@ -574,62 +553,63 @@ export function RestaurantSetup() {
               <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
                 <p style={{ fontWeight: 600, marginBottom: 4 }}>Upload your restaurant logo</p>
                 <p>Square image recommended</p>
-                <p>Min 200×200px, Max 5MB</p>
-                <button
-                  type="button"
+                <p>Min 200×200px • Max 5MB</p>
+                <button type="button"
                   onClick={() => document.getElementById('logoInput').click()}
-                  className="btn btn-outline btn-sm"
-                  style={{ marginTop: 8 }}
-                >
+                  className="btn btn-outline btn-sm" style={{ marginTop: 8 }}>
                   Choose File
                 </button>
               </div>
             </div>
-            <input id="logoInput" type="file" accept="image/*" onChange={handleLogoChange} style={{ display: 'none' }} />
+            <input id="logoInput" type="file" accept="image/*"
+              onChange={handleLogoChange} style={{ display: 'none' }} />
           </div>
 
           <div className="divider" />
 
-          {/* ── Basic Info ── */}
+          {/* Basic Info */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div style={{ gridColumn: '1/-1' }}>
               <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'block' }}>Restaurant Name *</label>
-              <input className="input" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required placeholder="e.g. Spice Garden" />
+              <input className="input" value={form.name}
+                onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                required placeholder="e.g. Spice Garden" />
             </div>
             <div style={{ gridColumn: '1/-1' }}>
               <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'block' }}>Description</label>
-              <textarea
-                className="input" value={form.description}
+              <textarea className="input" value={form.description}
                 onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
                 placeholder="What makes your restaurant special?"
-                style={{ resize: 'vertical', minHeight: 80 }}
-              />
+                style={{ resize: 'vertical', minHeight: 80 }} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'block' }}>Email *</label>
-              <input className="input" type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} required />
+              <input className="input" type="email" value={form.email}
+                onChange={e => setForm(p => ({ ...p, email: e.target.value }))} required />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'block' }}>Phone *</label>
-              <input className="input" type="tel" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} required />
+              <input className="input" type="tel" value={form.phone}
+                onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} required />
             </div>
           </div>
 
-          {/* ── Cuisines ── */}
+          {/* Cuisines */}
           <div>
             <label style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, display: 'block' }}>
-              Cuisines * <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(select all that apply)</span>
+              Cuisines *
+              <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6 }}>
+                (select all that apply)
+              </span>
             </label>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {CUISINE_OPTIONS.map(c => (
-                <button
-                  key={c} type="button" onClick={() => toggleCuisine(c)}
+                <button key={c} type="button" onClick={() => toggleCuisine(c)}
                   className="tag"
                   style={form.cuisine.includes(c) ? {
                     borderColor: 'var(--primary)', color: 'var(--primary)',
                     background: 'rgba(255,69,0,0.08)', fontWeight: 600
-                  } : {}}
-                >
+                  } : {}}>
                   {form.cuisine.includes(c) ? '✓ ' : ''}{c}
                 </button>
               ))}
@@ -641,64 +621,53 @@ export function RestaurantSetup() {
             )}
           </div>
 
-          {/* ── Address ── */}
+          {/* Address */}
           <div>
             <label style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, display: 'block' }}>📍 Address</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div style={{ gridColumn: '1/-1' }}>
-                <input
-                  className="input" value={form.address.street}
+                <input className="input" value={form.address.street}
                   onChange={e => setForm(p => ({ ...p, address: { ...p.address, street: e.target.value } }))}
-                  placeholder="Street Address *" required
-                />
+                  placeholder="Street Address *" required />
               </div>
-              <input
-                className="input" value={form.address.city}
+              <input className="input" value={form.address.city}
                 onChange={e => setForm(p => ({ ...p, address: { ...p.address, city: e.target.value } }))}
-                placeholder="City *" required
-              />
-              <input
-                className="input" value={form.address.pincode}
+                placeholder="City *" required />
+              <input className="input" value={form.address.pincode}
                 onChange={e => setForm(p => ({ ...p, address: { ...p.address, pincode: e.target.value } }))}
-                placeholder="Pincode"
-              />
+                placeholder="Pincode" />
             </div>
           </div>
 
-          {/* ── Delivery Settings ── */}
+          {/* Delivery Settings */}
           <div>
             <label style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, display: 'block' }}>🚴 Delivery Settings</label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: 'var(--text-secondary)' }}>Delivery Fee (₹)</label>
-                <input className="input" type="number" value={form.deliveryFee} onChange={e => setForm(p => ({ ...p, deliveryFee: parseInt(e.target.value) || 0 }))} min={0} />
+                <input className="input" type="number" value={form.deliveryFee}
+                  onChange={e => setForm(p => ({ ...p, deliveryFee: parseInt(e.target.value) || 0 }))} min={0} />
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: 'var(--text-secondary)' }}>Min Order (₹)</label>
-                <input className="input" type="number" value={form.minOrder} onChange={e => setForm(p => ({ ...p, minOrder: parseInt(e.target.value) || 0 }))} min={0} />
+                <input className="input" type="number" value={form.minOrder}
+                  onChange={e => setForm(p => ({ ...p, minOrder: parseInt(e.target.value) || 0 }))} min={0} />
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: 'var(--text-secondary)' }}>Prep Time (min)</label>
-                <input className="input" type="number" value={form.preparationTime} onChange={e => setForm(p => ({ ...p, preparationTime: parseInt(e.target.value) || 15 }))} min={5} />
+                <input className="input" type="number" value={form.preparationTime}
+                  onChange={e => setForm(p => ({ ...p, preparationTime: parseInt(e.target.value) || 15 }))} min={5} />
               </div>
             </div>
           </div>
 
-          {/* ── Submit ── */}
-          <button
-            type="submit"
-            className="btn btn-primary btn-lg w-full"
-            disabled={saving || uploadingLogo || uploadingCover}
-          >
+          {/* Submit */}
+          <button type="submit" className="btn btn-primary btn-lg w-full" disabled={saving}>
             {saving ? (
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <span className="spinner spinner-sm" /> Submitting...
               </span>
-            ) : uploadingLogo || uploadingCover ? (
-              '⏳ Please wait for images to finish uploading...'
-            ) : (
-              '🚀 Submit Restaurant for Approval'
-            )}
+            ) : '🚀 Submit Restaurant for Approval'}
           </button>
 
           <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
